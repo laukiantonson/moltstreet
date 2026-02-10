@@ -17,7 +17,7 @@ Bankr bot proved the model: wrap a token deployer (clanker) with a social interf
 - **Limited trading** — launch-only, minimal post-launch trading features.
 - **No ecosystem** — bankr is standalone. MoltStreet plugs into MoltCity governance + MoltBook profiles.
 
-MoltStreet builds the same core (tweet-to-token) but owns the full stack and adds agent-first features.
+MoltStreet builds the same core (tweet-to-token) using clanker directly — same deploy engine as bankr — but wraps it with a superior social layer, MoltX ecosystem integration, and a roadmap toward agent-first features (ERC-8004).
 
 ---
 
@@ -56,15 +56,15 @@ User tweets @MoltStreet "launch $MYCOIN" or "buy $MYCOIN 0.1 ETH"
 ┌──────────────────────┐
 │  Twitter Listener     │ ← Monitors mentions, parses intent
 │  /services/twitter-   │ ← User auth via X OAuth / wallet linking
-│   listener/           │ ← IP restriction + rate limiting
+│   listener/           │ ← IP restriction + anti-sybil measures
 └────────┬─────────────┘
          │
          ├── launch intent ──────────────┐
          │                               ▼
          │                    ┌─────────────────────┐
-         │                    │  Token Deployer       │ ← Our own deployer (no clanker dependency)
-         │                    │  /services/token-     │ ← Deploys ERC-20 + creates Uniswap v4 pool
-         │                    │   deployer/           │ ← Configurable tokenomics
+         │                    │  Clanker Integration  │ ← Uses clanker directly (same as bankr)
+         │                    │  /services/clanker-   │ ← ERC-20 deploy + Uniswap v4 pool
+         │                    │   bridge/             │ ← Clanker handles LP + indexing
          │                    └─────────────────────┘
          │
          ├── trade intent ───────────────┐
@@ -79,16 +79,16 @@ User tweets @MoltStreet "launch $MYCOIN" or "buy $MYCOIN 0.1 ETH"
                                          ▼
                               ┌─────────────────────┐
                               │  Analytics           │ ← Price, volume, holders
-                              │  /services/analytics/│ ← GeckoTerminal API + on-chain indexing
+                              │  /services/analytics/│ ← Clanker indexing + GeckoTerminal API
                               └─────────────────────┘
 
                               ┌─────────────────────┐
-                              │  Smart Contracts     │ ← Token factory, fee splitter
-                              │  /contracts/         │ ← Deployed on Base
+                              │  Fee Layer           │ ← Matches bankr's fee structure
+                              │  /services/fees/     │ ← Fees → $MOLTX stakers
                               └─────────────────────┘
 ```
 
-**Key difference:** We own the deployer. No clanker dependency. Full vertical control.
+**Key difference:** We use clanker directly (same deploy engine as bankr). Our differentiation is the social layer, MoltX ecosystem integration, and future agent-first features — not reinventing the deployer.
 
 ---
 
@@ -130,16 +130,42 @@ User tweets @MoltStreet "launch $MYCOIN" or "buy $MYCOIN 0.1 ETH"
 
 | Feature | Bankr | MoltStreet |
 |---------|-------|------------|
-| Token deployment | Depends on clanker (Farcaster bot) | Own deployer — full control |
+| Token deployment | Clanker (Farcaster bot) | Also clanker — same engine, better wrapper |
 | Social platform | X/Twitter only | X/Twitter + Farcaster + API |
 | Trading | Launch only | Launch + buy/sell + portfolio |
-| Agent support | Human users only | ERC-8004 agent identity native |
+| Agent support | Human users only | Human-first MVP → ERC-8004 agent identity (Phase 3) |
 | Ecosystem | Standalone | MoltCity + MoltBook + $MOLTX |
-| IP restriction | ✅ Yes | ✅ Yes + more granular rate limiting |
-| Analytics | Links to GeckoTerminal | Built-in analytics + GeckoTerminal |
-| Tokenomics config | Fixed | Configurable (supply, tax, vesting) |
+| IP/Anti-sybil | ✅ Yes | ✅ Yes + IP protection + anti-sybil |
+| Analytics/Indexing | Clanker indexing | Clanker indexing + GeckoTerminal |
+| Fee structure | Their fee model | Match bankr fees initially |
 | Revenue model | Unclear | Fees → $MOLTX stakers |
 | Open source | No | Yes (planned) |
+
+---
+
+## Strategic Decisions (Resolved)
+
+Sowmay's answers to the 9 core development questions (from Donald Pump group):
+
+| # | Question | Decision | Implication |
+|---|----------|----------|-------------|
+| 1 | Fork clanker or build from scratch? | **Use clanker directly** | No custom deployer — integrate clanker's existing infra as bankr does |
+| 2 | Own Uniswap hook or clanker's? | **Use clanker's** | Less custom smart contract work, faster to market |
+| 3 | LP model? | **Uniswap v4** (via clanker) | Clanker already handles pool creation on Uniswap v4 |
+| 4 | Agent-first or human-first? | **Human first** | MVP targets human users via X/Twitter; agent features (ERC-8004) come in Phase 3 |
+| 5 | Compete with bankr or integrate? | **Compete** | MoltStreet is a direct competitor, not a bankr integration |
+| 6 | Fee structure? | **Follow bankr's fee structure** | Reverse-engineer bankr's fees and match them initially |
+| 7 | Indexing? | **Clanker provides that** | No custom indexer needed — use clanker's indexing layer |
+| 8 | ERC-8004? | **Yes, research** | Research ERC-8004 for agent identity — not MVP-blocking but on roadmap |
+| 9 | Anti-sybil/IP protection? | **Yes, IP protection** | Implement IP-based rate limiting + anti-sybil measures |
+
+### What This Means for Architecture
+
+- **We are NOT building a custom token deployer.** We use clanker directly (same as bankr). Our differentiation is the social layer, ecosystem integration, and agent features — not the deploy engine.
+- **No custom Uniswap hooks.** Clanker handles pool creation and LP management.
+- **No custom indexer.** Clanker's indexing covers token discovery and analytics.
+- **Human-first MVP.** ERC-8004 agent identity is Phase 3, not Phase 1.
+- **Competitive positioning.** We compete with bankr head-on, matching their fees while adding MoltX ecosystem value.
 
 ---
 
@@ -163,12 +189,13 @@ Monitoring:           Grafana + custom dashboards
 
 ```
 moltstreet/
-├── contracts/              # Solidity — token factory, fee contracts
 ├── services/
 │   ├── twitter-listener/   # X/Twitter mention monitoring + intent parsing
-│   ├── token-deployer/     # ERC-20 deployment + Uniswap v4 pool creation
+│   ├── clanker-bridge/     # Clanker integration — token deploy + pool creation
 │   ├── trading-engine/     # Buy/sell execution via Uniswap v4
-│   └── analytics/          # Price, volume, holder tracking
+│   ├── fees/               # Fee layer — matches bankr's structure
+│   └── analytics/          # Clanker indexing + GeckoTerminal
+├── contracts/              # Solidity — fee splitter, future agent contracts
 ├── scripts/                # Deployment scripts, migrations
 ├── docs/                   # Architecture docs, API specs
 └── README.md
@@ -176,94 +203,63 @@ moltstreet/
 
 ---
 
-## Open Development Questions for Sowmay
+## Open Development Questions
 
-### 🔴 Critical — Need Answers Before Building
+### ✅ Resolved (Sowmay's Decisions)
+
+1. ~~**Fork clanker or build from scratch?**~~ → **Use clanker directly.** No custom deployer.
+2. ~~**Own Uniswap hook or clanker's?**~~ → **Use clanker's.** No custom hooks.
+3. ~~**LP model?**~~ → **Uniswap v4** via clanker.
+4. ~~**Agent-first or human-first?**~~ → **Human first.** Agent features in Phase 3.
+5. ~~**Compete with bankr or integrate?**~~ → **Compete.** Direct competitor.
+6. ~~**Fee structure?**~~ → **Follow bankr's fee structure.** Need to reverse-engineer from bankr.bot/api.
+7. ~~**Indexing?**~~ → **Clanker provides that.** No custom indexer.
+8. ~~**ERC-8004?**~~ → **Yes, research.** Not MVP-blocking but on roadmap.
+9. ~~**Anti-sybil/IP protection?**~~ → **Yes, IP protection.** Implement rate limiting + anti-sybil.
+
+### 🔴 Still Open — Need Answers Before Building
 
 1. **Custodial vs non-custodial wallets?**
    - Custodial = easier UX (user just tweets, we hold keys) but legal/security risk
    - Non-custodial = user links existing wallet, signs txs via DM deeplink
-   - Hybrid = custodial by default, export keys option?
    - **Do we use Privy / Turnkey / raw HD wallets?**
 
-2. **Do we fork clanker's deployer or build from scratch?**
-   - Clanker's contracts may be verified on Basescan — we could study them
-   - Building from scratch = more control but slower
-   - **What tokenomics should the default template have?** (supply, tax, burn?)
-
-3. **Revenue model — where do fees go?**
-   - Launch fee (flat ETH amount per deploy)?
-   - Trading fee (% of each swap)?
-   - Fees → $MOLTX buyback? → Stakers? → Treasury?
-   - **What's bankr's fee structure?** (need to reverse-engineer from their API at bankr.bot/api)
-
-4. **IP restriction implementation — how strict?**
-   - Bankr has IP restriction. Do we mean:
-     - Rate limiting (X launches per user per day)?
-     - Geo-blocking (block certain countries)?
-     - Sybil resistance (one wallet per X account)?
-   - **What specific restriction did you like about bankr's approach?**
-
-5. **Twitter bot account — do we have @MoltStreet or similar handle?**
+2. **Twitter bot account — do we have @MoltStreet or similar handle?**
    - Need Twitter Developer account with elevated access
    - API v2 with OAuth 2.0 for user auth
    - **Who controls the bot account?**
 
 ### 🟡 Important — Need Answers Before Phase 2
 
-6. **ERC-8004 agent identity — how deep do we integrate?**
-   - Just tag tokens with agent metadata?
-   - Full agent-as-deployer flow (agents launch tokens autonomously)?
-   - **Is MoltCity already issuing ERC-8004 identities we can reference?**
-
-7. **MoltCity governance integration — what decisions does governance control?**
-   - Token launch approvals?
-   - Fee parameter changes?
-   - Blacklisting scam tokens?
+3. **MoltCity governance integration — what decisions does governance control?**
+   - Token launch approvals? Fee parameter changes? Blacklisting scam tokens?
    - **Or is MoltStreet independent initially?**
 
-8. **Bonding curve vs direct Uniswap — which model first?**
+4. **Bonding curve vs direct Uniswap — which model first?**
+   - Bankr style = straight to Uniswap v4 pool (via clanker)
    - Pump.fun style = bonding curve → migrate to DEX at market cap threshold
-   - Bankr style = straight to Uniswap v4 pool
-   - **Bonding curve is more viral but more complex to build**
-
-9. **What chain specifically?**
-   - Base is the obvious choice ($MOLTX is on Base, bankr is on Base)
-   - But do we also want Base Sepolia testnet for staging?
-   - **Any interest in multi-chain from day 1?**
+   - **Bonding curve is more viral but more complex**
 
 ### 🟢 Nice to Have — Can Decide Later
 
-10. **Farcaster support — priority?**
-    - Bankr's origin is Farcaster (via clanker). Do we want to also be on Farcaster?
-    - Or X-only first, Farcaster later?
-
-11. **Open source strategy — when?**
-    - Open from day 1?
-    - Open after MVP is proven?
-    - Core open, premium features closed?
-
-12. **Token metadata / branding**
-    - Auto-generate token logos?
-    - Let users attach images in tweets?
-    - Store metadata on IPFS?
-
-13. **Bankr API access**
-    - We have `BANKR_API` key — what endpoints does it expose?
-    - Can we use it to study their flow before building ours?
-    - **Should we map their full API first?**
+5. **Farcaster support — priority?** X-only first or also Farcaster?
+6. **Open source strategy — when?** Day 1 or after MVP?
+7. **Token metadata / branding** — auto-generate logos? IPFS?
+8. **Bankr API deep dive** — map all endpoints from bankr.bot/api (we have `BANKR_API` key)
 
 ---
 
 ## Immediate Next Steps
 
-1. **Reverse-engineer bankr's API** (`bankr.bot/api`) — map all endpoints, understand the flow
-2. **Study clanker's contracts on Basescan** — understand the token factory pattern
-3. **Build Twitter listener MVP** — parse `@MoltStreet launch $TICKER` mentions
-4. **Write token factory contract** — basic ERC-20 + Uniswap v4 pool creation
-5. **Set up custodial wallet system** — one wallet per Twitter user
-6. **Deploy on Base Sepolia** — test end-to-end flow
-7. **Get Sowmay's answers** on the 🔴 critical questions above
+1. ~~**Get Sowmay's answers**~~ ✅ — 9 core questions resolved (see Strategic Decisions above)
+2. **Reverse-engineer bankr's fee structure** (`bankr.bot/api`) — match their fees
+3. **Study clanker's integration API** — understand how bankr calls clanker, replicate it
+4. **Build Twitter listener MVP** — parse `@MoltStreet launch $TICKER` mentions
+5. **Build clanker bridge service** — integrate clanker for token deploy + Uniswap v4 pool
+6. **Implement IP protection / anti-sybil** — rate limiting per user/IP
+7. **Research ERC-8004** — understand agent identity standard for Phase 3 roadmap
+8. **Set up custodial wallet system** — one wallet per Twitter user (still needs wallet tech decision)
+9. **Deploy on Base Sepolia** — test end-to-end flow
 
 ---
 
